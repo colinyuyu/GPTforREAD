@@ -1,0 +1,539 @@
+我需要你充当一个全能程序员，为我分析这个系统，系统只有三个文件，这是代码：
+第一个文件：index.html
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <title>ChatGPT专用版</title>
+    <link rel="stylesheet" href="css/common.css?v1.1">
+    <link rel="stylesheet" href="css/wenda.css?v1.1">
+    <link rel="stylesheet" href="css/hightlight.css">
+</head>
+
+<body>
+    <div class="layout-wrap">
+        <header class="layout-header">
+            <div class="container" data-flex="main:justify cross:start">
+                <div class="header-logo">
+                    <h2 class="logo"><a class="links" id="clean" title="清空对话信息"><span class="logo-title">清空对话信息</span></a></h2>
+                </div>
+                <div class="header-logo">
+                    <!--<h2 class="logo"><a class="links" href="https://github.com/dirk1983/chatgpt"><span class="logo-title">获取源码</span></a></h2>-->
+                </div>
+            </div>
+        </header>
+        <div class="layout-content">
+            <div class="container">
+                <article class="article" id="article">
+                    <div class="article-box">
+                        <div class="precast-block" data-flex="main:left">
+                            <!--
+                            <div class="input-group">
+                                <span style="text-align: center;color:#9ca2a8">&nbsp;&nbsp;API-KEY&nbsp;&nbsp;</span>
+                                <input type="password" id="key" style="border:1px solid grey;display:block;max-width:270px;width:calc(100% - 70px);" onload="this.focus();">
+                            </div>
+-->
+                            <div class="input-group">
+                                <span style="text-align: center;color:#9ca2a8">&nbsp;&nbsp;连续对话：</span>
+                                <input type="checkbox" id="keep" checked="" style="min-width:220px;">
+                                <label for="keep"></label>
+                            </div>
+                            <div class="input-group">
+                                <span style="text-align: center;color:#9ca2a8">&nbsp;&nbsp;预设话术：</span>
+                                <select id="preset-text" onchange="insertPresetText()" style="width:calc(100% - 90px);max-width:280px;">
+                                    <option value="">请选择</option>
+                                    <option value="我想让你充当 Linux 终端。我将输入命令，您将回复终端应显示的内容。我希望您只在一个唯一的代码块内回复终端输出，而不是其他任何内容。不要写解释。除非我指示您这样做，否则不要键入命令。当我需要用英语告诉你一些事情时，我会把文字放在中括号内[就像这样]。我的第一个命令是 pwd">充当 Linux 终端</option>
+                                </select>
+                            </div>
+                        </div>
+                        <ul id="article-wrapper">
+                        </ul>
+                        <div class="creating-loading" data-flex="main:center dir:top cross:center">
+                            <div class="semi-circle-spin"></div>
+                        </div>
+                        <div id="fixed-block">
+                            <div class="precast-block" id="kw-target-box" data-flex="main:left cross:center">
+                                <div id="target-box" class="box">
+                                    <textarea name="kw-target" placeholder="在此提问，按 Ctrl+Enter 发送" id="kw-target" autofocus rows=1></textarea>
+                                </div>
+                                <div class="right-btn layout-bar">
+                                    <p class="btn ai-btn bright-btn" id="ai-btn" data-flex="main:center cross:center"><i class="iconfont icon-wuguan"></i>发送</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/remarkable.js"></script>
+    <script src="js/jquery-3.6.4.min.js"></script>
+    <script src="js/jquery.cookie.min.js"></script>
+    <script src="js/layer.min.js"></script>
+    <script src="js/chat.js?v2.8"></script>
+    <script src="js/highlight.min.js"></script>
+    <script src="//cdn.bootcss.com/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({
+        showProcessingMessages: false,
+        messageStyle: "none",
+        extensions: ["tex2jax.js"],
+        jax: ["input/TeX", "output/HTML-CSS"],
+        tex2jax: {
+            inlineMath:  [ ["$", "$"] ],
+        displayMath: [ ["$$","$$"] ],
+        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre','code','a'],
+        ignoreClass:"comment-content"
+            },
+        "HTML-CSS": {
+            availableFonts: ["STIX","TeX"],
+        showMathMenu: false
+            }
+        });
+    </script>
+</body>
+
+</html>
+
+
+第二个文件：stream.php
+<?php
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: text/event-stream");
+header("X-Accel-Buffering: no");
+session_start();
+$postData = $_SESSION['data'];
+$_SESSION['response'] = "";
+$ch = curl_init();
+$OPENAI_API_KEY = "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";
+if (isset($_SESSION['key'])) {
+    $OPENAI_API_KEY = $_SESSION['key'];
+}
+$headers  = [
+    'Accept: application/json',
+    'Content-Type: application/json',
+    'Authorization: Bearer ' . $OPENAI_API_KEY
+];
+
+setcookie("errcode", ""); //EventSource无法获取错误信息，通过cookie传递
+setcookie("errmsg", "");
+
+$callback = function ($ch, $data) {
+    $complete = json_decode($data);
+    if (isset($complete->error)) {
+        setcookie("errcode", $complete->error->code);
+        setcookie("errmsg", $data);
+        if (strpos($complete->error->message, "Rate limit reached") === 0) { //访问频率超限错误返回的code为空，特殊处理一下
+            setcookie("errcode", "rate_limit_reached");
+        }
+        if (strpos($complete->error->message, "Your access was terminated") === 0) { //违规使用，被封禁，特殊处理一下
+            setcookie("errcode", "access_terminated");
+        }
+        if (strpos($complete->error->message, "You didn't provide an API key") === 0) { //未提供API-KEY
+            setcookie("errcode", "no_api_key");
+        }
+        if (strpos($complete->error->message, "You exceeded your current quota") === 0) { //API-KEY余额不足
+            setcookie("errcode", "insufficient_quota");
+        }
+        if (strpos($complete->error->message, "That model is currently overloaded") === 0) { //OpenAI服务器超负荷
+            setcookie("errcode", "model_overloaded");
+        }
+    } else {
+        echo $data;
+        $_SESSION['response'] .= $data;
+    }
+    return strlen($data);
+};
+
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
+curl_setopt($ch, CURLOPT_URL, 'https://api.openai.com/v1/chat/completions');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+curl_setopt($ch, CURLOPT_WRITEFUNCTION, $callback);
+//curl_setopt($ch, CURLOPT_PROXY, "http://127.0.0.1:1081");
+
+curl_exec($ch);
+
+$answer = "";
+if (substr(trim($_SESSION['response']), -6) == "[DONE]") {
+    $_SESSION['response'] = substr(trim($_SESSION['response']), 0, -6) . "{";
+}
+$responsearr = explode("}\n\ndata: {", $_SESSION['response']);
+
+foreach ($responsearr as $msg) {
+    $contentarr = json_decode("{" . trim($msg) . "}", true);
+    if (isset($contentarr['choices'][0]['delta']['content'])) {
+        $answer .= $contentarr['choices'][0]['delta']['content'];
+    }
+}
+
+$questionarr = json_decode($_SESSION['data'], true);
+$filecontent = $_SERVER["REMOTE_ADDR"] . " | " . date("Y-m-d H:i:s") . "\n";
+$filecontent .= "Q:" . end($questionarr['messages'])['content'] .  "\nA:" . trim($answer) . "\n----------------\n";
+$myfile = fopen(__DIR__ . "/chat.txt", "a") or die("Writing file failed.");
+fwrite($myfile, $filecontent);
+fclose($myfile);
+curl_close($ch);
+
+
+
+第三个文件：setsession.php
+<?php
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+
+$context = json_decode($_POST['context'] ?: "[]") ?: [];
+$postData = [
+    "model" => "gpt-3.5-turbo",
+    "temperature" => 0,
+    "stream" => true,
+    "messages" => [],
+];
+if (!empty($context)) {
+    $context = array_slice($context, -5);
+    foreach ($context as $message) {
+        $postData['messages'][] = ['role' => 'user', 'content' => str_replace("\n", "\\n", $message[0])];
+        $postData['messages'][] = ['role' => 'assistant', 'content' => str_replace("\n", "\\n", $message[1])];
+    }
+}
+$postData['messages'][] = ['role' => 'user', 'content' => $_POST['message']];
+$postData = json_encode($postData);
+session_start();
+$_SESSION['data'] = $postData;
+if ((isset($_POST['key'])) && (!empty($_POST['key']))) {
+    $_SESSION['key'] = $_POST['key'];
+}
+echo '{"success":true}';
+
+
+第四个文件：chat.json
+var contextarray = [];
+
+var defaults = {
+    html: false,        // Enable HTML tags in source
+    xhtmlOut: false,        // Use '/' to close single tags (<br />)
+    breaks: false,        // Convert '\n' in paragraphs into <br>
+    langPrefix: 'language-',  // CSS language prefix for fenced blocks
+    linkify: true,         // autoconvert URL-like texts to links
+    linkTarget: '',           // set target to open link in
+    typographer: true,         // Enable smartypants and other sweet transforms
+    _highlight: true,
+    _strict: false,
+    _view: 'html'
+};
+defaults.highlight = function (str, lang) {
+    if (!defaults._highlight || !window.hljs) { return ''; }
+
+    var hljs = window.hljs;
+    if (lang && hljs.getLanguage(lang)) {
+        try {
+            return hljs.highlight(lang, str).value;
+        } catch (__) { }
+    }
+
+    try {
+        return hljs.highlightAuto(str).value;
+    } catch (__) { }
+
+    return '';
+};
+mdHtml = new window.Remarkable('full', defaults);
+
+mdHtml.renderer.rules.table_open = function () {
+    return '<table class="table table-striped">\n';
+};
+
+mdHtml.renderer.rules.paragraph_open = function (tokens, idx) {
+    var line;
+    if (tokens[idx].lines && tokens[idx].level === 0) {
+        line = tokens[idx].lines[0];
+        return '<p class="line" data-line="' + line + '">';
+    }
+    return '<p>';
+};
+
+mdHtml.renderer.rules.heading_open = function (tokens, idx) {
+    var line;
+    if (tokens[idx].lines && tokens[idx].level === 0) {
+        line = tokens[idx].lines[0];
+        return '<h' + tokens[idx].hLevel + ' class="line" data-line="' + line + '">';
+    }
+    return '<h' + tokens[idx].hLevel + '>';
+};
+function getCookie(name) {
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.indexOf(name + '=') === 0) {
+            return cookie.substring(name.length + 1, cookie.length);
+        }
+    }
+    return null;
+}
+
+function isMobile() {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const mobileKeywords = ['iphone', 'ipod', 'ipad', 'android', 'windows phone', 'blackberry', 'nokia', 'opera mini', 'mobile'];
+    for (let i = 0; i < mobileKeywords.length; i++) {
+        if (userAgent.indexOf(mobileKeywords[i]) !== -1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function insertPresetText() {
+    $("#kw-target").val($('#preset-text').val());
+    autoresize();
+}
+
+
+
+function copyToClipboard(text) {
+    var input = document.createElement('textarea');
+    input.innerHTML = text;
+    document.body.appendChild(input);
+    input.select();
+    var result = document.execCommand('copy');
+    document.body.removeChild(input);
+    return result;
+}
+
+function copycode(obj) {
+    copyToClipboard($(obj).closest('code').clone().children('button').remove().end().text());
+    layer.msg("复制完成！");
+}
+    /******修正样式******/
+function autoresize() {
+    var textarea = $('#kw-target');
+    var width = textarea.width();
+    var content = (textarea.val() + "a").replace(/\\n/g, '<br>');
+    var div = $('<div>').css({
+        'position': 'absolute',
+        'top': '-99999px',
+        'border': '1px solid red',
+        'width': width,
+        'font-size': '15px',
+        'line-height': '20px',
+        'white-space': 'pre-wrap'
+    }).html(content).appendTo('body');
+    var height = div.height();
+    var rows = Math.ceil(height / 20);
+    div.remove();
+    textarea.attr('rows', rows);
+    $("#article-wrapper").height(parseInt($(window).height()) - parseInt($("#fixed-block").height()) - parseInt($(".layout-header").height()) - 80);
+}
+
+$(document).ready(function () {
+
+    autoresize();//加载修正样式
+    /******点击ctrl+enter执行发送消息功能******/
+    $("#kw-target").on('keydown', function (event) {
+        if (event.keyCode == 13 && event.ctrlKey) {
+            send_post();
+            return false;
+        }
+    });
+
+    $(window).resize(function () {
+        autoresize();//修正样式
+    });
+
+    $('#kw-target').on('input', function () {
+        autoresize();//修正样式
+    });
+    /******点击发送按钮执行发送消息功能******/
+    $("#ai-btn").click(function () {
+        if ($("#kw-target").is(':disabled')) {
+            clearInterval(timer);
+            $("#kw-target").val("");
+            $("#kw-target").attr("disabled", false);
+            autoresize();
+            $("#ai-btn").html('<i class="iconfont icon-wuguan"></i>发送');
+            if (!isMobile()) $("#kw-target").focus();
+        } else {
+            send_post();
+        }
+        return false;
+    });
+    /******清理页面消息******/
+    $("#clean").click(function () {
+        $("#article-wrapper").html("");
+        contextarray = [];
+        layer.msg("清理完毕！");
+        return false;
+    });
+    /******清理功能******/
+    $("#showlog").click(function () {
+        let btnArry = ['已阅'];
+        layer.open({ type: 1, title: '全部对话日志', area: ['80%', '80%'], shade: 0.5, scrollbar: true, offset: [($(window).height() * 0.1), ($(window).width() * 0.1)], content: '<iframe src="chat.txt?' + new Date().getTime() + '" style="width: 100%; height: 100%;"></iframe>', btn: btnArry });
+        return false;
+    });
+    /******发送消息******/
+    function send_post() {
+        /******检查key有没有******/    
+        if (($('#key').length) && ($('#key').val().length != 51)) {
+            layer.msg("请输入正确的API-KEY", { icon: 5 });
+            return;
+        }
+        /******检查是不是空的******/
+        var prompt = $("#kw-target").val();
+
+        if (prompt == "") {
+            layer.msg("请输入您的问题", { icon: 5 });
+            return;
+        }
+        /******定义一个等待消息时候的内容******/  
+        var loading = layer.msg('正在组织语言，请稍等片刻...', {
+            icon: 16,
+            shade: 0.4,
+            time: false //取消自动关闭
+        });
+        /******调用stream.php方法******/
+        function streaming() {
+            var es = new EventSource("stream.php");
+            var isstarted = true;
+            var alltext = "";
+            var isalltext = false;
+            es.onerror = function (event) {
+                layer.close(loading);
+                var errcode = getCookie("errcode");
+                switch (errcode) {
+                    case "invalid_api_key":
+                        layer.msg("API-KEY不合法");
+                        break;
+                    case "context_length_exceeded":
+                        layer.msg("问题和上下文长度超限，请重新提问");
+                        break;
+                    case "rate_limit_reached":
+                        layer.msg("同时访问用户过多，请稍后再试");
+                        break;
+                    case "access_terminated":
+                        layer.msg("违规使用，API-KEY被封禁");
+                        break;
+                    case "no_api_key":
+                        layer.msg("未提供API-KEY");
+                        break;
+                    case "insufficient_quota":
+                        layer.msg("API-KEY余额不足");
+                        break;
+                    case "account_deactivated":
+                        layer.msg("账户已禁用");
+                        break;
+                    case "model_overloaded":
+                        layer.msg("OpenAI模型超负荷，请重新发起请求");
+                        break;
+                    case null:
+                        layer.msg("OpenAI服务器访问超时或未知类型错误");
+                        break;
+                    default:
+                        layer.msg("OpenAI服务器故障，错误类型：" + errcode);
+                }
+                es.close();
+                if (!isMobile()) $("#kw-target").focus();
+                return;
+            }
+            es.onmessage = function (event) {
+                if (isstarted) {
+                    layer.close(loading);
+                    $("#kw-target").val("请耐心等待AI把话说完……");
+                    $("#kw-target").attr("disabled", true);
+                    autoresize();
+                    $("#ai-btn").html('<i class="iconfont icon-wuguan"></i>中止');
+                    layer.msg("处理成功！");
+                    isstarted = false;
+                    answer = randomString(16);
+                    $("#article-wrapper").append('<li class="article-title" id="q' + answer + '"><pre></pre></li>');
+                    for (var j = 0; j < prompt.length; j++) {
+                        $("#q" + answer).children('pre').text($("#q" + answer).children('pre').text() + prompt[j]);
+                    }
+                    $("#article-wrapper").append('<li class="article-content" id="' + answer + '"></li>');
+                    let str_ = '';
+                    let i = 0;
+                    timer = setInterval(() => {
+                        let newalltext = alltext;
+                        let islastletter = false;
+                        //有时服务器错误地返回\\n作为换行符，尤其是包含上下文的提问时，这行代码可以处理一下。
+                        if (newalltext.split("\n\n").length == newalltext.split("\n").length) {
+                            newalltext = newalltext.replace(/\\n/g, '\n');
+                        }
+                        if (str_.length < newalltext.length) {
+                            str_ += newalltext[i++];
+                            strforcode = str_ + "_";
+                            if ((str_.split("```").length % 2) == 0) strforcode += "\n```\n";
+                        } else {
+                            if (isalltext) {
+                                clearInterval(timer);
+                                strforcode = str_;
+                                islastletter = true;
+                                $("#kw-target").val("");
+                                $("#kw-target").attr("disabled", false);
+                                autoresize();
+                                $("#ai-btn").html('<i class="iconfont icon-wuguan"></i>发送');
+                                if (!isMobile()) $("#kw-target").focus();
+                            }
+                        }
+                        newalltext = mdHtml.render(strforcode);
+                        $("#" + answer).html(newalltext);
+                        if (islastletter) MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+                        $("#" + answer + " pre code").each(function () {
+                            $(this).html("<button onclick='copycode(this);' class='codebutton'>复制</button>" + $(this).html());
+                        });
+                        document.getElementById("article-wrapper").scrollTop = 100000;
+                    }, 30);
+                }
+                if (event.data == "[DONE]") {
+                    isalltext = true;
+                    contextarray.push([prompt, alltext]);
+                    contextarray = contextarray.slice(-5); //只保留最近5次对话作为上下文，以免超过最大tokens限制
+                    es.close();
+                    return;
+                }
+                var json = eval("(" + event.data + ")");
+                if (json.choices[0].delta.hasOwnProperty("content")) {
+                    if (alltext == "") {
+                        alltext = json.choices[0].delta.content.replace(/^\n+/, ''); //去掉回复消息中偶尔开头就存在的连续换行符
+                    } else {
+                        alltext += json.choices[0].delta.content;
+                    }
+                }
+            }
+        }
+
+    //ajax，自动初始化setsession.php里面的信息
+        $.ajax({
+            cache: true,
+            type: "POST",
+            url: "setsession.php",
+            data: {
+                message: prompt,
+                context: (!($("#keep").length) || ($("#keep").prop("checked"))) ? JSON.stringify(contextarray) : '[]',
+                key: ($("#key").length) ? ($("#key").val()) : '',
+            },
+            dataType: "json",
+            success: function (results) {
+                streaming();
+            }
+        });
+
+
+    }
+
+    function randomString(len) {
+        len = len || 32;
+        var $chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678';    /****默认去掉了容易混淆的字符oOLl,9gq,Vv,Uu,I1****/
+        var maxPos = $chars.length;
+        var pwd = '';
+        for (i = 0; i < len; i++) {
+            pwd += $chars.charAt(Math.floor(Math.random() * maxPos));
+        }
+        return pwd;
+    }
+
+});
